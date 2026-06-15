@@ -181,7 +181,8 @@ def main(args=None):
         except Exception as e:
             node.get_logger().error("Error disabling robot: {}".format(e))
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
