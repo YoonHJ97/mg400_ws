@@ -2,11 +2,26 @@
 
 Dobot **MG400** 로봇 팔을 ROS2로 제어하기 위한 패키지 모음입니다.
 
-저장소 루트에 ROS2 패키지들이 바로 위치하는 **패키지 저장소** 형태이며,
+저장소 루트에 ROS2 패키지들이 위치하는 **패키지 저장소** 형태이며,
 colcon 워크스페이스의 `src/` 안에 클론해서 사용합니다.
 
-- `main` 브랜치 : **순수 MG400** 제어 (이 README 기준)
-- `amr-integration` 브랜치 : Nav2 기반 **AMR(모바일 로봇) 연동** 노드 추가
+- `main` 브랜치 : MG400 단독 제어 (이 README 기준)
+- `amr-integration` 브랜치 : Nav2 기반 AMR 연동 (드라이버 인터페이스를 호출)
+
+---
+
+## 설계 철학 — 단일 드라이버
+
+로봇과 TCP(29999/30003/30004)로 통신하는 노드는 **`mg400_driver` 하나뿐**입니다.
+다른 모든 노드(AMR 포함)는 이 드라이버가 제공하는 **ROS 인터페이스로만** 대화하므로,
+같은 포트를 두 곳에서 여는 충돌이 구조적으로 발생하지 않습니다.
+모션은 **액션**으로 추상화해 Nav2 의 `NavigateToPose` 와 동일한 사용 방식을 따릅니다.
+
+```
+            ┌──────────── ROS 인터페이스 ────────────┐
+  사용자 / AMR ──(action/service/topic)──►  mg400_driver  ──(TCP)──►  MG400
+            └────────────────────────────────────────┘   (유일한 연결 소유자)
+```
 
 ---
 
@@ -14,103 +29,65 @@ colcon 워크스페이스의 `src/` 안에 클론해서 사용합니다.
 
 | 패키지 | 빌드 타입 | 설명 |
 |---|---|---|
-| **`mg400_pkg`** | ament_python | MG400 노드 + Dobot TCP API (`dobot_api.py`) |
-| **`mg400_pkg_msgs`** | ament_cmake | 사용자 정의 인터페이스 (`MoveTo.srv`) |
+| **`mg400_driver`** | ament_python | 로봇과 통신하는 **유일한** 노드 + Dobot TCP API |
+| **`mg400_interfaces`** | ament_cmake | 액션/서비스 정의 (`MoveL`, `MoveJoint`, `SetEnabled`, `ClearError`) |
 | **`mg400_bringup`** | ament_cmake | 실행용 launch + 파라미터(config) |
 
 ```
 mg400_ws/
-├── mg400_pkg/
-│   └── mg400_pkg/
-│       ├── dobot_api.py          # Dobot TCP 통신 SDK (소켓 래퍼)
-│       ├── status_node.py        # 상태 발행 노드 (mg400_status_node, bringup)
-│       ├── move_control_node.py  # 모션 제어 노드 (mg400_move_node, bringup 연동)
-│       ├── move_service_server.py# MoveTo 서비스 서버 (독립 실행)
-│       ├── move_node.py          # A↔B 왕복 모션 데모 (독립 실행)
-│       └── files/                # 알람 코드(JSON) + 로더
-├── mg400_pkg_msgs/
-│   └── srv/MoveTo.srv
+├── mg400_driver/
+│   └── mg400_driver/
+│       ├── driver_node.py    # mg400_driver 노드 (상태/모션/모드 전부)
+│       ├── dobot_api.py      # Dobot TCP 통신 SDK
+│       └── files/            # 알람 코드(JSON)
+├── mg400_interfaces/
+│   ├── action/MoveL.action
+│   ├── action/MoveJoint.action
+│   └── srv/{SetEnabled,ClearError}.srv
 └── mg400_bringup/
     ├── launch/mg400.launch.py
-    └── config/mg400_params.yaml
+    └── config/mg400_driver.yaml
 ```
 
 ---
 
-## 2. 노드 설명
+## 2. mg400_driver 인터페이스
 
-### `mg400_status_node` (status_node.py) — 상태 발행
-30004(feed) 포트의 1440바이트 피드백 패킷을 파싱해 ROS2 토픽으로 발행합니다.
-(수신은 별도 스레드, 발행은 타이머로 분리)
+> 모든 이름 앞에 노드 이름이 붙습니다 (예: `/mg400_driver/tcp_pose`).
 
-| 발행 토픽 | 타입 | 내용 |
+### 발행 토픽 (상태)
+| 토픽 | 타입 | 내용 |
 |---|---|---|
-| `~/joint_states` | `sensor_msgs/JointState` | `q_actual` → 4관절 각도 (deg→rad 변환) |
-| `~/tcp_pose` | `geometry_msgs/PoseStamped` | TCP 위치/자세 (mm→m, RPY→quaternion) |
-| `~/robot_mode` | `std_msgs/Int32` | 로봇 모드 값 |
+| `~/joint_states` | `sensor_msgs/JointState` | 관절 각도 (rad) |
+| `~/tcp_pose` | `geometry_msgs/PoseStamped` | TCP 위치/자세 (m, quaternion) |
+| `~/robot_mode` | `std_msgs/Int32` | 로봇 모드 |
 
-> 노드 이름이 `mg400_status_node`이므로 실제 토픽은
-> `/mg400_status_node/joint_states` 처럼 노드 이름이 앞에 붙습니다.
-
-**파라미터** (config/mg400_params.yaml 에서 주입)
-
-| 파라미터 | 기본값 | 설명 |
+### 액션 (모션)
+| 액션 | 타입 | 내용 |
 |---|---|---|
-| `robot_ip` | `192.168.1.6` | MG400 IP |
-| `feed_port` | `30004` | 실시간 피드백 포트 |
-| `publish_rate` | `10.0` | 발행 주기 (Hz) |
-| `base_frame` | `mg400_base_link` | PoseStamped frame_id |
-| `joint_names` | `[joint1..joint4]` | JointState 관절 이름 |
-| `joints_in_degrees` | `true` | deg→rad 변환 여부 |
+| `~/move_l` | `mg400_interfaces/MoveL` | 직선 이동 (`geometry_msgs/Pose` 목표) |
+| `~/move_joint` | `mg400_interfaces/MoveJoint` | 관절 이동 (`float64[4]` rad) |
 
-### `mg400_move_node` (move_control_node.py) — 모션 제어 (bringup 연동)
-bringup 과 함께 동작하는 모션 제어 노드입니다. **feed(30004)를 직접 열지 않고**
-`mg400_status_node` 가 발행하는 `tcp_pose` 를 구독해 도착을 판정하므로, 한 시스템에서
-feed 연결은 status_node 하나만 유지됩니다 (포트 충돌 없음). 명령은 29999/30003 만 사용.
+- 피드백 : 현재 자세 + 남은 거리(`distance_remaining`)
+- 취소 지원, 도착/타임아웃 시 결과 반환
+- 로봇은 한 대이므로 **동시에 하나의 모션만** 수행 (중복 요청은 거절)
 
-- 서비스 : `~/move_to` (`mg400_pkg_msgs/srv/MoveTo`) → `/mg400_move_node/move_to`
-  ```
-  float64[4] target      # 요청: [X, Y, Z, R]
-  ---
-  bool   success         # 응답: 도착 여부
-  string message
-  ```
-- 구독 : `tcp_pose_topic` (기본 `/mg400_status_node/tcp_pose`)
-- 파라미터 : `robot_ip`, `dashboard_port`(29999), `move_port`(30003),
-  `tcp_pose_topic`, `auto_enable`, `pos_tolerance_mm`, `rot_tolerance_deg`,
-  `arrival_timeout`
-- **반드시 `mg400_status_node` 와 함께** 실행 (도착 판정에 tcp_pose 필요)
-
-### `move_service_server` / `move_node` — 독립 실행용 (bringup 별개)
-둘 다 dashboard/move/**feed(30004)를 자체적으로 열고** 로봇을 점유하는 독립 노드라
-bringup 과 동시에 실행하면 feed 포트가 충돌합니다. **bringup 과 분리해 단독 실행**하세요.
-
-- `move_service_server` : `move_to` 서비스로 목표 좌표 이동 (자체 feed 로 도착 판정)
-- `move_node` : 고정 두 점(point_a ↔ point_b) 무한 왕복 데모
-
-```bash
-# 단독 실행 (bringup 을 끈 상태에서)
-ros2 run mg400_pkg move_service_server
-ros2 run mg400_pkg move_node
-```
-
-> 이 두 노드는 아직 IP가 코드에 하드코딩(`192.168.1.6`)되어 있습니다. 추후 파라미터화 예정.
+### 서비스 (모드)
+| 서비스 | 타입 | 내용 |
+|---|---|---|
+| `~/set_enabled` | `mg400_interfaces/SetEnabled` | EnableRobot / DisableRobot |
+| `~/clear_error` | `mg400_interfaces/ClearError` | 에러 클리어 후 재개 |
 
 ---
 
 ## 3. 빌드
 
 ```bash
-# 1) 워크스페이스 준비 후 src/ 안에 클론
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 git clone https://github.com/YoonHJ97/mg400_ws.git
-
-# 2) 의존성 설치 (선택)
 cd ~/ros2_ws
-rosdep install --from-paths src --ignore-src -r -y
-
-# 3) 빌드 & 환경 적용
+rosdep install --from-paths src --ignore-src -r -y   # (선택)
 colcon build
 source install/setup.bash
 ```
@@ -119,56 +96,70 @@ source install/setup.bash
 
 ---
 
-## 4. 실행 (bringup)
+## 4. 실행
 
 ```bash
-# 상태 발행 노드만 실행
+# 드라이버 실행 (상태 발행 + 액션/서비스 서버)
 ros2 launch mg400_bringup mg400.launch.py
 
-# 로봇 IP 변경 (config 값 덮어쓰기)
+# 로봇 IP 변경
 ros2 launch mg400_bringup mg400.launch.py robot_ip:=192.168.1.10
-
-# 모션 제어 노드(mg400_move_node)도 함께 실행
-ros2 launch mg400_bringup mg400.launch.py enable_move:=true
 ```
 
-### 상태 확인 / 명령 예시
+### 상태 확인
 ```bash
-# 발행되는 상태 확인
-ros2 topic echo /mg400_status_node/tcp_pose
-ros2 topic echo /mg400_status_node/joint_states
+ros2 topic echo /mg400_driver/tcp_pose
+ros2 topic echo /mg400_driver/joint_states
+ros2 action list           # /mg400_driver/move_l, /mg400_driver/move_joint
+```
 
-# 특정 좌표로 이동 (enable_move:=true 로 실행했을 때)
-ros2 service call /mg400_move_node/move_to mg400_pkg_msgs/srv/MoveTo "{target: [300.0, 0.0, 50.0, 0.0]}"
+### 모션 명령 (액션)
+```bash
+# 직선 이동: (0.3, 0.0, 0.05) m 위치로
+ros2 action send_goal /mg400_driver/move_l mg400_interfaces/action/MoveL \
+  "{target: {position: {x: 0.3, y: 0.0, z: 0.05}, orientation: {w: 1.0}}, speed_ratio: 50.0}" \
+  --feedback
+
+# 관절 이동 (rad)
+ros2 action send_goal /mg400_driver/move_joint mg400_interfaces/action/MoveJoint \
+  "{joint_positions: [0.0, 0.2, 0.2, 0.0], speed_ratio: 50.0}"
+```
+
+### 모드 명령 (서비스)
+```bash
+ros2 service call /mg400_driver/set_enabled mg400_interfaces/srv/SetEnabled "{enable: true}"
+ros2 service call /mg400_driver/clear_error mg400_interfaces/srv/ClearError "{}"
 ```
 
 ---
 
-## 5. 네트워크 / 포트
+## 5. 파라미터 (config/mg400_driver.yaml)
 
-MG400은 TCP로 통신하며 3개 포트를 사용합니다 (기본 IP `192.168.1.6`).
+| 파라미터 | 기본값 | 설명 |
+|---|---|---|
+| `robot_ip` | `192.168.1.6` | MG400 IP |
+| `dashboard_port` / `move_port` / `feed_port` | 29999 / 30003 / 30004 | TCP 포트 |
+| `publish_rate` | `10.0` | 상태 발행 주기 (Hz) |
+| `control_rate` | `20.0` | 액션 도착 모니터링 주기 (Hz) |
+| `auto_enable` | `true` | 시작 시 EnableRobot |
+| `pos_tolerance_mm` / `rot_tolerance_deg` | 1.0 / 1.0 | 직선 이동 도착 오차 |
+| `joint_tolerance_deg` | `1.0` | 관절 이동 도착 오차 |
+| `arrival_timeout` | `30.0` | 도착 대기 한계 (s) |
+
+---
+
+## 6. 네트워크 / 포트
 
 | 포트 | 용도 |
 |---|---|
-| 29999 | Dashboard (Enable/Disable, 에러 클리어 등 명령) |
-| 30003 | Move (MovL 등 모션 명령) |
-| 30004 | Feed (실시간 피드백 패킷 수신) |
-
----
-
-## 6. 브랜치
-
-| 브랜치 | 내용 |
-|---|---|
-| `main` | 순수 MG400 제어 (위 패키지들) |
-| `amr-integration` | main + Nav2 연동 노드(`nav_and_move`, `nav_and_return`, `test`, `test_mg400`) |
-
-AMR 연동 작업은 `git checkout amr-integration` 후 진행합니다.
+| 29999 | Dashboard (Enable/Disable, 에러 클리어) |
+| 30003 | Move (MovL/MovJ 등 모션) |
+| 30004 | Feed (실시간 피드백) |
 
 ---
 
 ## 7. 향후 작업(TODO)
 
 - [ ] URDF + `robot_state_publisher` 로 RViz 실시간 시각화 (joint_states 활용)
-- [ ] `move_node` / `move_service_server` IP 파라미터화 → bringup 통합
-- [ ] 상태 발행 + 명령을 합친 통합 driver 노드
+- [ ] `amr-integration` 브랜치를 드라이버 액션(`move_l`) 호출 방식으로 갱신
+- [ ] 속도/가속 프로파일, I/O 제어 인터페이스 추가

@@ -1,6 +1,6 @@
 from setuptools import find_namespace_packages, setup
 
-package_name = 'mg400_pkg'
+package_name = 'mg400_driver'
 
 setup(
     name=package_name,
@@ -17,15 +17,13 @@ setup(
     zip_safe=True,
     maintainer='hjpc',
     maintainer_email='xxbb96@gmail.com',
-    description='TODO: Package description',
+    description='Single-connection ROS2 driver for the Dobot MG400 arm '
+                '(state topics, motion actions, mode services).',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'move_node = mg400_pkg.move_node:main',
-            'move_service_server = mg400_pkg.move_service_server:main',
-            'mg400_status_node = mg400_pkg.status_node:main',
-            'mg400_move_node = mg400_pkg.move_control_node:main',
+            'mg400_driver = mg400_driver.driver_node:main',
         ],
     },
 )

@@ -1,0 +1,4 @@
+# ClearError.srv — clear controller error and resume
+---
+bool success
+string message

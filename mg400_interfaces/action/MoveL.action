@@ -1,0 +1,13 @@
+# MoveL.action — Cartesian linear move (MovL)
+# Goal
+geometry_msgs/Pose target      # position [m], orientation quaternion (yaw -> Rz)
+float64 speed_ratio            # 1-100 (%), 0 = keep current speed
+---
+# Result
+bool success
+string message
+geometry_msgs/Pose final_pose
+---
+# Feedback
+geometry_msgs/Pose current_pose
+float64 distance_remaining     # [m]

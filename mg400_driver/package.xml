@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>mg400_pkg</name>
+  <name>mg400_driver</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Single-connection ROS2 driver for the Dobot MG400 arm.</description>
   <maintainer email="xxbb96@gmail.com">hjpc</maintainer>
   <license>TODO: License declaration</license>
 
@@ -13,7 +13,7 @@
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>tf_transformations</exec_depend>
-  <exec_depend>mg400_pkg_msgs</exec_depend>
+  <exec_depend>mg400_interfaces</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

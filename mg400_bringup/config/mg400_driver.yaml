@@ -1,0 +1,15 @@
+mg400_driver:
+  ros__parameters:
+    robot_ip: "192.168.1.6"      # MG400 IP (네트워크에 맞게 수정)
+    dashboard_port: 29999        # 명령(Enable/Clear) 포트
+    move_port: 30003             # 모션(MovL/MovJ) 포트
+    feed_port: 30004             # 실시간 피드백 포트
+    publish_rate: 10.0           # 상태 발행 주기 (Hz)
+    control_rate: 20.0           # 액션 도착 모니터링 주기 (Hz)
+    base_frame: "mg400_base_link"
+    joint_names: ["joint1", "joint2", "joint3", "joint4"]
+    auto_enable: true            # 시작 시 EnableRobot
+    pos_tolerance_mm: 1.0        # 직선 이동 위치 도착 오차 (mm)
+    rot_tolerance_deg: 1.0       # 직선 이동 R 도착 오차 (deg)
+    joint_tolerance_deg: 1.0     # 관절 이동 도착 오차 (deg)
+    arrival_timeout: 30.0        # 도착 대기 한계 (s)

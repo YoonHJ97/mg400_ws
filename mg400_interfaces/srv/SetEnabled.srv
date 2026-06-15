@@ -1,0 +1,5 @@
+# SetEnabled.srv — enable/disable the robot
+bool enable        # true = EnableRobot, false = DisableRobot
+---
+bool success
+string message

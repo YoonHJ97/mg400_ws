@@ -1,0 +1,13 @@
+# MoveJoint.action — joint-space move (JointMovJ), 4-axis MG400
+# Goal
+float64[4] joint_positions     # target joint angles [rad] (j1..j4)
+float64 speed_ratio            # 1-100 (%), 0 = keep current speed
+---
+# Result
+bool success
+string message
+float64[4] final_positions     # [rad]
+---
+# Feedback
+float64[4] current_positions   # [rad]
+float64 max_error              # largest per-joint error [rad]
