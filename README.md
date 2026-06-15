@@ -23,9 +23,10 @@ mg400_ws/
 ├── mg400_pkg/
 │   └── mg400_pkg/
 │       ├── dobot_api.py          # Dobot TCP 통신 SDK (소켓 래퍼)
-│       ├── move_node.py          # A↔B 왕복 모션 데모 노드
-│       ├── move_service_server.py# MoveTo 서비스 서버
-│       ├── status_node.py        # 상태 발행 노드 (mg400_status_node)
+│       ├── status_node.py        # 상태 발행 노드 (mg400_status_node, bringup)
+│       ├── move_control_node.py  # 모션 제어 노드 (mg400_move_node, bringup 연동)
+│       ├── move_service_server.py# MoveTo 서비스 서버 (독립 실행)
+│       ├── move_node.py          # A↔B 왕복 모션 데모 (독립 실행)
 │       └── files/                # 알람 코드(JSON) + 로더
 ├── mg400_pkg_msgs/
 │   └── srv/MoveTo.srv
@@ -62,22 +63,38 @@ mg400_ws/
 | `joint_names` | `[joint1..joint4]` | JointState 관절 이름 |
 | `joints_in_degrees` | `true` | deg→rad 변환 여부 |
 
-### `move_service_server` (move_service_server.py) — 명령 서버
-`MoveTo` 서비스로 받은 목표 좌표로 로봇을 이동시키고 도착 결과를 응답합니다.
+### `mg400_move_node` (move_control_node.py) — 모션 제어 (bringup 연동)
+bringup 과 함께 동작하는 모션 제어 노드입니다. **feed(30004)를 직접 열지 않고**
+`mg400_status_node` 가 발행하는 `tcp_pose` 를 구독해 도착을 판정하므로, 한 시스템에서
+feed 연결은 status_node 하나만 유지됩니다 (포트 충돌 없음). 명령은 29999/30003 만 사용.
 
-- 서비스 : `move_to` (`mg400_pkg_msgs/srv/MoveTo`)
+- 서비스 : `~/move_to` (`mg400_pkg_msgs/srv/MoveTo`) → `/mg400_move_node/move_to`
   ```
   float64[4] target      # 요청: [X, Y, Z, R]
   ---
-  bool   success         # 응답: 성공 여부
+  bool   success         # 응답: 도착 여부
   string message
   ```
+- 구독 : `tcp_pose_topic` (기본 `/mg400_status_node/tcp_pose`)
+- 파라미터 : `robot_ip`, `dashboard_port`(29999), `move_port`(30003),
+  `tcp_pose_topic`, `auto_enable`, `pos_tolerance_mm`, `rot_tolerance_deg`,
+  `arrival_timeout`
+- **반드시 `mg400_status_node` 와 함께** 실행 (도착 판정에 tcp_pose 필요)
 
-### `move_node` (move_node.py) — 모션 데모
-연결·활성화 후 고정된 두 점(point_a ↔ point_b)을 무한 왕복하는 예제 노드입니다.
+### `move_service_server` / `move_node` — 독립 실행용 (bringup 별개)
+둘 다 dashboard/move/**feed(30004)를 자체적으로 열고** 로봇을 점유하는 독립 노드라
+bringup 과 동시에 실행하면 feed 포트가 충돌합니다. **bringup 과 분리해 단독 실행**하세요.
 
-> `move_node` / `move_service_server` 는 아직 IP가 코드에 하드코딩되어 있습니다
-> (`192.168.1.6`). 추후 파라미터화 예정.
+- `move_service_server` : `move_to` 서비스로 목표 좌표 이동 (자체 feed 로 도착 판정)
+- `move_node` : 고정 두 점(point_a ↔ point_b) 무한 왕복 데모
+
+```bash
+# 단독 실행 (bringup 을 끈 상태에서)
+ros2 run mg400_pkg move_service_server
+ros2 run mg400_pkg move_node
+```
+
+> 이 두 노드는 아직 IP가 코드에 하드코딩(`192.168.1.6`)되어 있습니다. 추후 파라미터화 예정.
 
 ---
 
@@ -111,8 +128,8 @@ ros2 launch mg400_bringup mg400.launch.py
 # 로봇 IP 변경 (config 값 덮어쓰기)
 ros2 launch mg400_bringup mg400.launch.py robot_ip:=192.168.1.10
 
-# MoveTo 서비스 서버도 함께 실행
-ros2 launch mg400_bringup mg400.launch.py enable_service:=true
+# 모션 제어 노드(mg400_move_node)도 함께 실행
+ros2 launch mg400_bringup mg400.launch.py enable_move:=true
 ```
 
 ### 상태 확인 / 명령 예시
@@ -121,8 +138,8 @@ ros2 launch mg400_bringup mg400.launch.py enable_service:=true
 ros2 topic echo /mg400_status_node/tcp_pose
 ros2 topic echo /mg400_status_node/joint_states
 
-# 특정 좌표로 이동 (enable_service:=true 로 실행했을 때)
-ros2 service call /move_to mg400_pkg_msgs/srv/MoveTo "{target: [300.0, 0.0, 50.0, 0.0]}"
+# 특정 좌표로 이동 (enable_move:=true 로 실행했을 때)
+ros2 service call /mg400_move_node/move_to mg400_pkg_msgs/srv/MoveTo "{target: [300.0, 0.0, 50.0, 0.0]}"
 ```
 
 ---
