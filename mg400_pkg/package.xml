@@ -13,6 +13,7 @@
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>tf_transformations</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend>
   <exec_depend>mg400_pkg_msgs</exec_depend>
 
   <test_depend>ament_copyright</test_depend>

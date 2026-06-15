@@ -25,6 +25,10 @@ setup(
             'move_node = mg400_pkg.move_node:main',
             'move_service_server = mg400_pkg.move_service_server:main',
             'mg400_status_node = mg400_pkg.status_node:main',
+            'nav_and_move = mg400_pkg.nav_and_move:main',
+            'nav_and_return = mg400_pkg.nav_and_return:main',
+            'test = mg400_pkg.test:main',
+            'test_mg400 = mg400_pkg.test_mg400:main',
         ],
     },
 )
