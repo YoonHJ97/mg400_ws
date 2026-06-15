@@ -1,0 +1,8 @@
+mg400_status_node:
+  ros__parameters:
+    robot_ip: "192.168.1.6"     # MG400 IP (네트워크에 맞게 수정)
+    feed_port: 30004            # 실시간 피드백 포트
+    publish_rate: 10.0          # 상태 발행 주기 (Hz)
+    base_frame: "mg400_base_link"
+    joint_names: ["joint1", "joint2", "joint3", "joint4"]
+    joints_in_degrees: true     # 로봇이 deg 로 보고 -> rad 로 변환해 발행

@@ -24,6 +24,7 @@ setup(
         'console_scripts': [
             'move_node = mg400_pkg.move_node:main',
             'move_service_server = mg400_pkg.move_service_server:main',
+            'mg400_status_node = mg400_pkg.status_node:main',
         ],
     },
 )
