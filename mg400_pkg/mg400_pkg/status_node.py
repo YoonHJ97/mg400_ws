@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """MG400 상태 발행 노드.
 
-이전 Dobot_ws/dobot/tcp_monitor.py 를 ROS2 노드로 발전시킨 버전.
-30004(feed) 포트의 1440바이트 피드백 패킷을 파싱해서 print 대신 토픽으로 발행한다.
-
 발행 토픽:
     ~/joint_states  (sensor_msgs/JointState)   q_actual -> 4관절 각도
     ~/tcp_pose      (geometry_msgs/PoseStamped) tool_vector_actual -> TCP 위치/자세
